@@ -1,0 +1,84 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: glusterfscluster
+spec:
+  serviceName: "glusterfscluster"
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: glusterfscluster
+      annotations:
+        pod.alpha.kubernetes.io/initialized: "true"
+    spec:
+      # soft antiaffinity for optimize placement
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - glusterfscluster
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: glusterfscluster
+        image: registry.cs/ailab/ebot-glusterfs-cmb:186bb4aa-201712181115
+        securityContext:
+          privileged: true
+        command: ["/bin/sh","-c"]
+        args: ["./run.sh"]
+        ports:
+          - containerPort: 8500
+            name: http
+        resources:
+          limits:
+            cpu: 1
+            memory: 512Mi
+          requests:
+            cpu: 1
+            memory: 512Mi
+
+        volumeMounts:
+        - mountPath: /etc/localtime
+          name: hosttime
+        - mountPath: /data/glusterfs
+          name: glusterfsdata
+        - mountPath: /var/lib/glusterd
+          name: glusterfsconfig
+      volumes:
+       - name: hosttime
+         hostPath:
+           path: /etc/localtime
+       - name: glusterfsdata
+         hostPath:
+#           path: /mnt/glusterfs/data
+           path: /data/cmb-ai/glusterfs/data
+       - name: glusterfsconfig
+         hostPath:
+#           path: /mnt/glusterfs/config
+           path: /data/cmb-ai/glusterfs/config
+      #select node label if enable
+#      nodeSelector:
+#        type: emo-master
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glusterfscluster
+  labels:
+    app: glusterfscluster
+spec:
+  ports:
+  - name: http
+    protocol: TCP
+    #port is loadbalancer port
+    port: 8500
+    # for clustering, port=targetPort
+    # adding clusterIP: none for setting up deep dns
+  clusterIP: None
+  selector:
+    app: glusterfscluster
